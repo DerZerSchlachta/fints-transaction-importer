@@ -2,3 +2,30 @@
 app/__pycache__/
 data/
 journal/
+
+# Android / IDE files
+*.iml
+
+# Gradle
+.gradle/
+build/
+
+# Local configuration
+local.properties
+
+# Android Studio
+.idea/
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+
+# OS files
+.DS_Store
+
+# Android build outputs
+captures/
+.externalNativeBuild/
+.cxx/
