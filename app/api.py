@@ -1,76 +1,65 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from app.database_manager import save_as_processed
-import json
-import os
-
 from pydantic import BaseModel
+from pathlib import Path
+import json
+
+from app.database_manager import save_as_processed
+from app.ledger_writer import write_ledger_entries
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "static"
+DB_PATH = BASE_DIR / "data" / "db" / "unknown_transactions.json"
+
+app = FastAPI()
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 class TransactionUpdate(BaseModel):
     id: str
-    ledger: str
-    date: str
-    path: str
+    ledger: str | None = None
+    date: str | None = None
+    path: str | None = None
 
 
-app = FastAPI()
+def read_unknown_transactions():
+    if not DB_PATH.exists():
+        return []
+    with DB_PATH.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
-# Resolve project root (since this file is inside /app)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-DB_PATH = os.path.join(BASE_DIR, "data", "db", "unknown_transactions.json")
-
-# Serve static frontend files
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+def write_unknown_transactions(data):
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with DB_PATH.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
 
 
 @app.get("/")
 def root():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    return FileResponse(STATIC_DIR / "index.html")
 
 
-# ----------------------------
-# API: Unknown transactions
-# ----------------------------
-@app.get("/api/unknown-transactions")
-def get_unknown_transactions():
-    import json
-    import os
+@app.get("/unknown/{transaction_id}")
+def unknown_detail(transaction_id: str):
+    return FileResponse(STATIC_DIR / "index.html")
 
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    path = os.path.join(BASE_DIR, "data", "db", "unknown_transactions.json")
 
-    if not os.path.exists(path):
-        return []
+@app.get("/api/state")
+def get_state():
+    return {"unknown": read_unknown_transactions(), "known": []}
 
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    return data
 
 @app.post("/api/update-transaction")
 def update_transaction(tx: TransactionUpdate):
-    from app.ledger_writer import write_ledger_entries
-    from app.database_manager import save_as_processed  # assuming this exists
+    tx_dict = tx.model_dump()
 
-    tx_dict = tx.dict()
-
-    # 1. Save as processed (wrap in list if your function expects a list)
     save_as_processed([tx_dict])
+    if tx_dict["ledger"] is not None:
+        write_ledger_entries([tx_dict])
 
-    # 2. Write ledger (also expects a list)
-    write_ledger_entries([tx_dict])
-
-    # 3. Remove from unknown_transactions.json
-    if os.path.exists(DB_PATH):
-        with open(DB_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        data = [entry for entry in data if entry["id"] != tx.id]
-
-        with open(DB_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+    unknown = read_unknown_transactions()
+    unknown = [entry for entry in unknown if entry.get("id") != tx.id]
+    write_unknown_transactions(unknown)
 
     return {"status": "ok", "id": tx.id}
