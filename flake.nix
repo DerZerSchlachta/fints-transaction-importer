@@ -14,8 +14,6 @@
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = [
           pkgs.python312
-          pkgs.hledger
-          pkgs.git
           pkgs.python312Packages.pandas
           pkgs.python312Packages.fints
           pkgs.python312Packages.click
